@@ -3,6 +3,7 @@ package de.tivin.mobLootChest
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Block
+import org.bukkit.block.BlockFace
 import org.bukkit.block.Chest
 import org.bukkit.entity.LivingEntity
 import org.bukkit.event.EventHandler
@@ -17,6 +18,7 @@ import org.bukkit.scheduler.BukkitRunnable
 
 class MobLootChest : JavaPlugin(), Listener {
     private val activeTasks: MutableMap<Location, BukkitRunnable> = mutableMapOf()
+    private val replaceBlockTasks: MutableMap<Location, Material> = mutableMapOf()
 
     override fun onEnable() {
         // Register the event listener
@@ -38,12 +40,19 @@ class MobLootChest : JavaPlugin(), Listener {
         val location: Location = entity.location
 
         // Capture the drops first, then clear default drops
-        val drops: List<ItemStack> = event.drops
+        val drops: List<ItemStack> = event.drops.map { it.clone() }
         event.drops.clear()
 
         // Place a chest at the mob's death location
         val block: Block = location.block
-        block.type = Material.CHEST
+
+        // Save block type under chest to restore later
+        val blockUnderChest: Block = block.getRelative(BlockFace.DOWN)
+        replaceBlockTasks[blockUnderChest.location] = blockUnderChest.type
+
+        if (drops.isNotEmpty()) {
+            block.type = Material.CHEST
+        }
 
         if (block.state is Chest) {
             val chest: Chest = block.state as Chest
@@ -61,6 +70,14 @@ class MobLootChest : JavaPlugin(), Listener {
                 if (block.type == Material.CHEST) {
                     block.type = Material.AIR
                 }
+
+                // Restore the block under the chest
+                val blockUnder = block.getRelative(BlockFace.DOWN)
+                val originalMaterial = replaceBlockTasks[blockUnder.location]
+
+                blockUnder.type = originalMaterial ?: Material.AIR
+
+                replaceBlockTasks.remove(blockUnder.location)
                 activeTasks.remove(location)
             }
         }
@@ -90,10 +107,18 @@ class MobLootChest : JavaPlugin(), Listener {
             val location: Location = block.location
 
             // If the chest is empty after closing, remove it immediately
-            if (event.inventory.isEmpty && activeTasks.containsKey(location)) {
+            if (event.inventory.isEmpty) {
                 val task = activeTasks[location]
                 task?.cancel()
+
+                // Restore the block under the chest
+                val blockUnder = block.getRelative(BlockFace.DOWN)
+                val originalMaterial = replaceBlockTasks[blockUnder.location]
+                blockUnder.type = originalMaterial ?: Material.AIR
+
                 block.type = Material.AIR
+
+                replaceBlockTasks.remove(blockUnder.location)
                 activeTasks.remove(location)
             }
         }
