@@ -1,0 +1,4 @@
+name: mob-loot-chest
+version: '1.0.1'
+main: de.tivin.mobLootChest.MobLootChest
+api-version: '1.21'
