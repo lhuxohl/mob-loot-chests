@@ -9,7 +9,7 @@ on:
     # IMPORTANT: grant the token the right scopes
     permissions:
       contents: write      # needed for tags/commits
-      metadata: read       # required for repo metadata
+      metadata: write       # required for repo metadata
       # Explicitly grant release write access
       releases: write
 
