@@ -64,8 +64,6 @@ class MobLootChest : JavaPlugin(), Listener {
             // Schedule removal task
             val task = object : BukkitRunnable() {
                 override fun run() {
-                    logger.warning { "Task executed with ${chestBlock.location}:${replaceBlockTasks[chestBlock.location]}" }
-
                     if (chestBlock.type == Material.CHEST) {
                         chestBlock.type = Material.AIR
                     }
@@ -116,8 +114,6 @@ class MobLootChest : JavaPlugin(), Listener {
                 blockUnder.type = originalMaterial ?: Material.AIR
 
                 block.type = Material.AIR
-
-                logger.warning { "Task executed with ${location}:${replaceBlockTasks[location]}:${replaceBlockTasks}" }
 
                 replaceBlockTasks.remove(location)
                 activeTasks[location]?.cancel()
