@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "de.tivin"
-version = "1.21-2.1.2"
+version = "1.21-2.1.3"
 
 repositories {
     mavenCentral()
