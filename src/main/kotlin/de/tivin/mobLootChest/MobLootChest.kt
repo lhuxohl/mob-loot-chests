@@ -5,15 +5,11 @@ import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.block.Chest
-import org.bukkit.entity.LivingEntity
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.inventory.InventoryCloseEvent
-import org.bukkit.event.inventory.InventoryType
-import org.bukkit.inventory.Inventory
-import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.scheduler.BukkitRunnable
 
@@ -37,57 +33,55 @@ class MobLootChest : JavaPlugin(), Listener {
 
     @EventHandler
     fun onMobDeath(event: EntityDeathEvent) {
-        val entity = event.entity
-        val location = entity.location
+        event.entity.location.let { deathLocation ->
+            val drops = event.drops.map { it.clone() }
+            if (drops.isEmpty()) return
 
-        val drops = event.drops.map { it.clone() }
-        event.drops.clear()
+            // Remove default drop handling
+            event.drops.clear()
 
-        if (drops.isEmpty()) return
+            val isSolidGround = !deathLocation.block.type.isAir
 
-        val groundBlock = location.block
+            // Chest should go ABOVE the ground block if the ground block is solid
+            val chestBlock = deathLocation.block.takeIf { !isSolidGround }
+                ?: deathLocation.block.getRelative(BlockFace.UP)
 
-        // Chest should go ABOVE the ground block if the ground block is solid
-        val isSolidGround = !location.block.type.isAir
+            // Only place if space is empty
+            if (!chestBlock.type.isAir) return
 
-        val chestBlock = location.block.takeIf { !isSolidGround }
-            ?: groundBlock.getRelative(BlockFace.UP)
+            // Block under the chest (to be restored later)
+            val blockUnder = chestBlock.getRelative(BlockFace.DOWN)
+            replaceBlockTasks[chestBlock.location] = blockUnder.type
 
-        val blockUnder = location.block.takeIf { isSolidGround }
-            ?: chestBlock.getRelative(BlockFace.DOWN)
+            // Place the chest and add items
+            chestBlock.type = Material.CHEST
 
-        replaceBlockTasks[blockUnder.location] = blockUnder.type
+            val chest = chestBlock.state as Chest
+            val chestInventory = chest.inventory
 
-        // Only place if space is empty
-        if (!chestBlock.type.isAir) return
+            drops.forEach { chestInventory.addItem(it) }
 
-        chestBlock.type = Material.CHEST
+            // Schedule removal task
+            val task = object : BukkitRunnable() {
+                override fun run() {
+                    logger.warning { "Task executed with ${chestBlock.location}:${replaceBlockTasks[chestBlock.location]}" }
 
-        val chest = chestBlock.state as Chest
-        val chestInventory = chest.inventory
+                    if (chestBlock.type == Material.CHEST) {
+                        chestBlock.type = Material.AIR
+                    }
 
-        drops.forEach { chestInventory.addItem(it) }
+                    // Restore the block under the chest
+                    blockUnder.type = replaceBlockTasks[chestBlock.location]
+                        ?: Material.AIR
 
-        // Schedule removal
-        val task = object : BukkitRunnable() {
-            override fun run() {
-                if (chestBlock.type == Material.CHEST) {
-                    chestBlock.type = Material.AIR
+                    replaceBlockTasks.remove(chestBlock.location)
+                    activeTasks.remove(chestBlock.location)
                 }
-
-                // Restore the block under the chest
-                val originalMaterial = replaceBlockTasks[blockUnder.location]
-
-                blockUnder.type = originalMaterial
-                    ?: Material.AIR
-
-                replaceBlockTasks.remove(blockUnder.location)
-                activeTasks.remove(location)
             }
-        }
 
-        task.runTaskLater(this, 600L)
-        activeTasks[location] = task
+            task.runTaskLater(this, 600L)
+            activeTasks[chestBlock.location] = task
+        }
     }
 
 
@@ -118,12 +112,15 @@ class MobLootChest : JavaPlugin(), Listener {
 
                 // Restore the block under the chest
                 val blockUnder = block.getRelative(BlockFace.DOWN)
-                val originalMaterial = replaceBlockTasks[blockUnder.location]
+                val originalMaterial = replaceBlockTasks[location]
                 blockUnder.type = originalMaterial ?: Material.AIR
 
                 block.type = Material.AIR
 
-                replaceBlockTasks.remove(blockUnder.location)
+                logger.warning { "Task executed with ${location}:${replaceBlockTasks[location]}:${replaceBlockTasks}" }
+
+                replaceBlockTasks.remove(location)
+                activeTasks[location]?.cancel()
                 activeTasks.remove(location)
             }
         }
