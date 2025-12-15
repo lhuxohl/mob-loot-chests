@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     kotlin("jvm") version "2.3.0-RC2"
     id("com.gradleup.shadow") version "8.3.0"
@@ -5,7 +7,7 @@ plugins {
 }
 
 group = "de.tivin"
-version = "2.1.0"
+version = "2.1.1"
 
 repositories {
     mavenCentral()
@@ -33,6 +35,12 @@ kotlin {
     jvmToolchain(targetJavaVersion)
 }
 
+// Ensure the shadow jar is produced as the main artifact (no "all" classifier)
+tasks.named<ShadowJar>("shadowJar") {
+    archiveClassifier.set("")
+}
+
+// Keep build depending on shadowJar
 tasks.build {
     dependsOn("shadowJar")
 }
