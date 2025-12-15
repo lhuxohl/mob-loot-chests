@@ -4,6 +4,12 @@ on:
   release:
     types: [created]
 
+    permissions:
+      contents: write      # needed for tags/commits
+      metadata: read       # required for repo metadata
+      # Explicitly grant release write access
+      releases: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
