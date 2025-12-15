@@ -1,36 +1,54 @@
-name: Build Jar on Release
+name: Build JAR on Release
 
+# Trigger when a release is **created** (or edited, if you also want that)
 on:
   release:
     types: [created]
 
-    permissions:
-      contents: write      # needed for tags/commits
-      metadata: read       # required for repo metadata
-      # Explicitly grant release write access
-      releases: write
+# ----------------------------------------------------------------------
+# IMPORTANT: grant the token the right scopes
+permissions:
+  contents: write      # <-- enables upload of assets
+  metadata: read       # <-- read tags / commit info (default, but explicit is clearer)
+  # (you can also add `id-token: write` if you ever need OIDC signing)
 
 jobs:
-  build:
+  build-and-upload:
     runs-on: ubuntu-latest
 
     steps:
+      # --------------------------------------------------------------
+      # 1️⃣ Checkout the full repo (including tags) – needed for gradle
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # fetch all history + tags
 
+      # --------------------------------------------------------------
+      # 2️⃣ Set up Java 21 (or whatever version you target)
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          distribution: temurin
+          java-version: 21
 
+      # --------------------------------------------------------------
+      # 3️⃣ Make the wrapper executable (if you keep it in the repo)
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      - name: Build shadow jar
-        run: ./gradlew shadowJar
+      # --------------------------------------------------------------
+      # 4️⃣ Build the shadow JAR
+      - name: Build shadow JAR
+        run: ./gradlew clean shadowJar   # clean is optional but nice
 
-      - name: Upload jar to release
+      # --------------------------------------------------------------
+      # 5️⃣ Upload the JAR to the *same* release that triggered the workflow
+      - name: Upload JAR to release
         uses: softprops/action-gh-release@v2
         with:
+          # The tag that caused the workflow is already known to the action,
+          # so we don’t need to pass `tag_name` – it will reuse the existing release.
           files: build/libs/*.jar
+          # Optional: fail the job if the asset already exists
+          # replace_existing_asset: true
