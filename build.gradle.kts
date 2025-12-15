@@ -1,5 +1,10 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.kotlin.dsl.support.kotlinCompilerOptions
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    kotlin("jvm") version "2.1.21"
+    kotlin("jvm") version "2.3.0-RC2"
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
@@ -8,37 +13,46 @@ version = "1.21-2.1.2"
 
 repositories {
     mavenCentral()
-    maven { url = uri("https://hub.spigotmc.org/nexus/content/repositories/snapshots/") }
+    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
 }
 
 dependencies {
-    testImplementation(kotlin("test"))
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.7.0")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.7.0")
-    compileOnly("org.spigotmc:spigot-api:1.21.7-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot-api:1.21.8-R0.1-SNAPSHOT")
+
+    // THIS is what provides kotlin/jvm/internal/Intrinsics
     implementation(kotlin("stdlib"))
 }
 
-tasks.test {
-    useJUnitPlatform()
-}
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(17)
 }
 
-tasks {
-    shadowJar {
-        archiveFileName.set("SpawnerGUI.jar")
-        minimize() // optional: removes unused Kotlin classes
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17)) // Force Java 17
+tasks.named<ShadowJar>("shadowJar") {
+    // Make shadowJar replace the normal jar
+    archiveClassifier.set("")
+
+    // DO NOT minimize Kotlin
+    minimize {
+        exclude(dependency("org.jetbrains.kotlin:.*"))
     }
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions.jvmTarget = "17"
+// Make `build` produce the shaded jar
+tasks.build {
+    dependsOn("shadowJar")
+}
+
+tasks.processResources {
+    val props = mapOf("version" to version)
+    inputs.properties(props)
+    filteringCharset = "UTF-8"
+    filesMatching("plugin.yml") {
+        expand(props)
+    }
 }
