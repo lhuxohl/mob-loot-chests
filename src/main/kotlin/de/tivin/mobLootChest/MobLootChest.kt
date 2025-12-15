@@ -11,6 +11,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.inventory.InventoryCloseEvent
+import org.bukkit.event.inventory.InventoryType
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
@@ -36,55 +37,59 @@ class MobLootChest : JavaPlugin(), Listener {
 
     @EventHandler
     fun onMobDeath(event: EntityDeathEvent) {
-        val entity: LivingEntity = event.entity
-        val location: Location = entity.location
+        val entity = event.entity
+        val location = entity.location
 
-        // Capture the drops first, then clear default drops
-        val drops: List<ItemStack> = event.drops.map { it.clone() }
+        val drops = event.drops.map { it.clone() }
         event.drops.clear()
 
-        // Place a chest at the mob's death location
-        val block: Block = location.block
+        if (drops.isEmpty()) return
 
-        // Save block type under chest to restore later
-        val blockUnderChest: Block = block.getRelative(BlockFace.DOWN)
-        replaceBlockTasks[blockUnderChest.location] = blockUnderChest.type
+        val groundBlock = location.block
 
-        if (drops.isNotEmpty()) {
-            block.type = Material.CHEST
-        }
+        // Chest should go ABOVE the ground block if the ground block is solid
+        val isSolidGround = !location.block.type.isAir
 
-        if (block.state is Chest) {
-            val chest: Chest = block.state as Chest
-            val chestInventory: Inventory = chest.inventory
+        val chestBlock = location.block.takeIf { !isSolidGround }
+            ?: groundBlock.getRelative(BlockFace.UP)
 
-            // Add the mob's loot to the chest
-            drops.onEach { drop ->
-                chestInventory.addItem(drop)
-            }
-        }
+        val blockUnder = location.block.takeIf { isSolidGround }
+            ?: chestBlock.getRelative(BlockFace.DOWN)
 
-        // Despawn the chest after 30 seconds
+        replaceBlockTasks[blockUnder.location] = blockUnder.type
+
+        // Only place if space is empty
+        if (!chestBlock.type.isAir) return
+
+        chestBlock.type = Material.CHEST
+
+        val chest = chestBlock.state as Chest
+        val chestInventory = chest.inventory
+
+        drops.forEach { chestInventory.addItem(it) }
+
+        // Schedule removal
         val task = object : BukkitRunnable() {
             override fun run() {
-                if (block.type == Material.CHEST) {
-                    block.type = Material.AIR
+                if (chestBlock.type == Material.CHEST) {
+                    chestBlock.type = Material.AIR
                 }
 
                 // Restore the block under the chest
-                val blockUnder = block.getRelative(BlockFace.DOWN)
                 val originalMaterial = replaceBlockTasks[blockUnder.location]
 
-                blockUnder.type = originalMaterial ?: Material.AIR
+                blockUnder.type = originalMaterial
+                    ?: Material.AIR
 
                 replaceBlockTasks.remove(blockUnder.location)
                 activeTasks.remove(location)
             }
         }
 
-        task.runTaskLater(this, 600L) // 30 * 20 ticks = 600L = 30 seconds
-        activeTasks[location] = task;
+        task.runTaskLater(this, 600L)
+        activeTasks[location] = task
     }
+
 
     @EventHandler
     fun onBlockBreak(event: BlockBreakEvent) {
